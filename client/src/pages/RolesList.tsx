@@ -129,10 +129,9 @@ export default function RolesList() {
         },
         {
             name: 'Actions',
-            right: true,
             cell: (row: any) => (
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {canEdit && (
+                <div style={{ display: 'flex', gap: '0.5rem', width: '100%', justifyContent: 'flex-end' }}>
+                    {row.id !== 1 && canEdit && (
                         <button
                             onClick={() => handleEdit(row)}
                             style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#3b82f6', border: 'none', color: 'white', cursor: 'pointer' }}
@@ -140,7 +139,7 @@ export default function RolesList() {
                             <Edit2 size={16} />
                         </button>
                     )}
-                    {canDelete && (
+                    {row.id !== 1 && canDelete && (
                         <button
                             onClick={() => handleDelete(row.id)}
                             style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#ef4444', border: 'none', color: 'white', cursor: 'pointer' }}
@@ -151,6 +150,7 @@ export default function RolesList() {
                 </div>
             )
         }
+
     ];
 
     if (!canView) return <div style={{ padding: '2rem', color: 'white' }}>Permission denied</div>;

@@ -209,9 +209,8 @@ export default function UsersList() {
     },
     {
       name: 'Actions',
-      right: true,
       cell: (row: any) => (
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', width: '100%', justifyContent: 'flex-end' }}>
           {canEdit && (
             <button
               onClick={() => handleEdit(row)}
@@ -359,7 +358,7 @@ export default function UsersList() {
             </button>
             <button
               type="submit"
-              style={{ padding: '0.75rem 1.5rem', borderRadius: '0.375rem', backgroundColor: '3b82f6', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 500 }}
+              style={{ padding: '0.75rem 1.5rem', borderRadius: '0.375rem', backgroundColor: '#3b82f6', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 500 }}
             >
               {editingUser ? 'Update' : 'Create'}
             </button>

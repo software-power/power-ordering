@@ -24,5 +24,5 @@ SELECT id, 'User list', '/users/list', 'active' FROM menus WHERE name='Users'
 ON DUPLICATE KEY UPDATE path=VALUES(path), status=VALUES(status);
 
 INSERT INTO submenus (menu_id, name, path, status)
-SELECT id, 'Roles', '/users/roles', 'active' FROM menus WHERE name='Users'
+SELECT id, 'Roles', '/roles/list', 'active' FROM menus WHERE name='Users'
 ON DUPLICATE KEY UPDATE path=VALUES(path), status=VALUES(status);
