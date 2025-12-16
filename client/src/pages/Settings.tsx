@@ -1,11 +1,82 @@
 // Features and logic by Wajihi Ramadan (JeehTech)
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import toast from 'react-hot-toast';
+import PageTitle from '../components/PageTitle';
+
+import { useAuth } from '../auth/AuthContext';
 
 export default function Settings() {
+    const { state } = useAuth();
     const { settings, updateSettings, saveSettingsToServer, loading } = useSettings();
-    const [activeTab, setActiveTab] = useState<'company' | 'api' | 'defaults'>('company');
+    const [activeTab, setActiveTab] = useState<'company' | 'api' | 'defaults' | 'tally'>('company');
+    const [tallyConfig, setTallyConfig] = useState({ tally_url: '', tally_port: '' });
+    const [userRole, setUserRole] = useState<number | null>(null);
+    const [parentId, setParentId] = useState<number | null>(null);
+    const [testingTally, setTestingTally] = useState(false);
+
+    // Fetch user profile for Tally Config
+    useEffect(() => {
+        if (!state.accessToken) return;
+        fetch(`${settings.apiBaseUrl}/auth/profile`, {
+            headers: { Authorization: `Bearer ${state.accessToken}` }
+        })
+            .then(res => res.json())
+            .then(data => {
+                setUserRole(data.role_id);
+                setParentId(data.parent_id);
+                setTallyConfig({
+                    tally_url: data.tally_url || 'http://localhost',
+                    tally_port: data.tally_port || '9000'
+                });
+
+                // Set default tab based on role
+                if (data.role_id === 1) setActiveTab('company');
+                else if (!data.parent_id) setActiveTab('tally'); // Main Tally User
+                else setActiveTab('api'); // Employee
+            })
+            .catch(console.error);
+    }, [state.accessToken, settings.apiBaseUrl]);
+
+    const handleTestTally = async () => {
+        setTestingTally(true);
+        try {
+            const res = await fetch(`${settings.apiBaseUrl}/tally/test`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${state.accessToken}`
+                },
+                body: JSON.stringify(tallyConfig)
+            });
+            const data = await res.json();
+            if (res.ok) toast.success(data.message);
+            else toast.error(data.message);
+        } catch (e) {
+            toast.error('Connection Failed');
+        } finally {
+            setTestingTally(false);
+        }
+    };
+
+    const handleSaveTally = async () => {
+        if (!state.user) return;
+        // Update user profile with new Tally config
+        try {
+            const res = await fetch(`${settings.apiBaseUrl}/users/${state.user.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${state.accessToken}`
+                },
+                body: JSON.stringify(tallyConfig)
+            });
+            if (res.ok) toast.success('Tally Configuration Saved');
+            else toast.error('Failed to save configuration');
+        } catch (e) {
+            toast.error('Error saving configuration');
+        }
+    };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, key: 'logoUrl' | 'faviconUrl') => {
         const file = e.target.files?.[0];
@@ -30,10 +101,20 @@ export default function Settings() {
 
     return (
         <div className="card-animate" style={{ padding: '0.5rem' }}>
+            <PageTitle title="Settings" />
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
-                <TabButton active={activeTab === 'company'} onClick={() => setActiveTab('company')}>Company Settings</TabButton>
-                <TabButton active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Endpoints</TabButton>
-                <TabButton active={activeTab === 'defaults'} onClick={() => setActiveTab('defaults')}>Defaults</TabButton>
+                {userRole === 1 && (
+                    <>
+                        <TabButton active={activeTab === 'company'} onClick={() => setActiveTab('company')}>Company Settings</TabButton>
+                        <TabButton active={activeTab === 'defaults'} onClick={() => setActiveTab('defaults')}>Defaults</TabButton>
+                        <TabButton active={activeTab === 'api'} onClick={() => setActiveTab('api')}>API Endpoints</TabButton>
+                    </>
+                )}
+
+                {/* Show Tally tab for Main Tally Users (No parent) or Admin */}
+                {(userRole === 1 || !parentId) && (
+                    <TabButton active={activeTab === 'tally'} onClick={() => setActiveTab('tally')}>Tally Integration</TabButton>
+                )}
             </div>
 
             <div className="fade-in">
@@ -84,6 +165,49 @@ export default function Settings() {
                     </div>
                 )}
 
+                {activeTab === 'tally' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div style={{ padding: '1rem', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem', color: '#0369a1' }}>
+                            Configure your local Tally Prime instance connection. Ensure Tally is running and ODBC Server is enabled.
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                            <div className="form-group">
+                                <label>Tally URL</label>
+                                <input
+                                    className="form-input"
+                                    value={tallyConfig.tally_url}
+                                    onChange={(e) => setTallyConfig({ ...tallyConfig, tally_url: e.target.value })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Tally Port</label>
+                                <input
+                                    className="form-input"
+                                    value={tallyConfig.tally_port}
+                                    onChange={(e) => setTallyConfig({ ...tallyConfig, tally_port: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            <button
+                                className="submit-btn"
+                                style={{ backgroundColor: '#64748b', width: 'auto' }}
+                                onClick={handleTestTally}
+                                disabled={testingTally}
+                            >
+                                {testingTally ? 'Testing...' : 'Test Connection'}
+                            </button>
+                            <button
+                                className="submit-btn"
+                                style={{ width: 'auto' }}
+                                onClick={handleSaveTally}
+                            >
+                                Save Configuration
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {activeTab === 'defaults' && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                         <div className="form-group">
@@ -122,11 +246,14 @@ export default function Settings() {
                 )}
             </div>
 
-            <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', textAlign: 'right' }}>
-                <button className="submit-btn" style={{ width: 'auto', padding: '0.75rem 2rem' }} onClick={handleSave} disabled={loading}>
-                    {loading ? 'Saving...' : 'Save Changes'}
-                </button>
-            </div>
+            {/* Global Save button - hide on Tally tab as it has its own Save Configuration button */}
+            {activeTab !== 'tally' && (
+                <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', textAlign: 'right' }}>
+                    <button className="submit-btn" style={{ width: 'auto', padding: '0.75rem 2rem' }} onClick={handleSave} disabled={loading}>
+                        {loading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

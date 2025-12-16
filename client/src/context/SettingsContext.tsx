@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { HelmetProvider, Helmet } from 'react-helmet-async';
 import { useAuth } from '../auth/AuthContext';
 import toast from 'react-hot-toast';
+import { API_URL } from '../config';
 
 type Settings = {
     companyName: string;
@@ -29,7 +30,7 @@ const defaultSettings: Settings = {
     currency: 'USD',
     country: 'USA',
     defaultSalesPerson: '',
-    apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+    apiBaseUrl: API_URL,
     themePrimaryColor: '#4f46e5'
 };
 
@@ -46,12 +47,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Fetch settings from server on mount or when token changes
     useEffect(() => {
         async function fetchSettings() {
-            if (!state.accessToken) return;
-
             try {
-                const res = await fetch(`${settings.apiBaseUrl}/settings`, {
-                    headers: { Authorization: `Bearer ${state.accessToken}` }
-                });
+                const headers: any = {};
+                if (state.accessToken) {
+                    headers.Authorization = `Bearer ${state.accessToken}`;
+                }
+
+                const res = await fetch(`${settings.apiBaseUrl}/settings`, { headers });
                 if (res.ok) {
                     const data = await res.json();
                     if (data) {

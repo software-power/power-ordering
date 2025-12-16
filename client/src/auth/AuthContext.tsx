@@ -1,7 +1,7 @@
 // Features and logic by Wajihi Ramadan (JeehTech)
 import { createContext, useContext, useReducer, useEffect, ReactNode, Dispatch } from 'react';
 
-type User = { email: string };
+type User = { id: number; email: string; role_id: number };
 type State = { accessToken: string | null; user: User | null };
 type Action = { type: 'LOGIN'; accessToken: string; user: User } | { type: 'LOGOUT' };
 

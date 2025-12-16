@@ -6,9 +6,11 @@ import DataTableComponent from '../components/DataTable';
 import toast from 'react-hot-toast';
 import { Edit2, Trash2, UserPlus } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
+import { useSettings } from '../context/SettingsContext';
 
 export default function UsersList() {
   const { state } = useAuth();
+  const { settings } = useSettings();
   const confirm = useConfirm();
   const canView = usePermission('user.view');
   const canAdd = usePermission('user.add');
@@ -31,7 +33,9 @@ export default function UsersList() {
     phone: '',
     password: '',
     role_id: '',
-    status: 'active'
+    status: 'active',
+    tally_url: 'http://localhost',
+    tally_port: '9000'
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -45,7 +49,7 @@ export default function UsersList() {
   async function fetchUsers() {
     setLoading(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
+      const res = await fetch(`${settings.apiBaseUrl}/users`, {
         headers: { Authorization: `Bearer ${state.accessToken}` }
       });
       if (res.ok) {
@@ -63,7 +67,7 @@ export default function UsersList() {
 
   async function fetchRoles() {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/roles`, {
+      const res = await fetch(`${settings.apiBaseUrl}/roles`, {
         headers: { Authorization: `Bearer ${state.accessToken}` }
       });
       if (res.ok) {
@@ -92,7 +96,9 @@ export default function UsersList() {
       phone: user.phone || '',
       password: '',
       role_id: roleId,
-      status: user.status
+      status: user.status,
+      tally_url: user.tally_url || 'http://localhost',
+      tally_port: user.tally_port || '9000'
     });
     setIsModalOpen(true);
   };
@@ -101,7 +107,7 @@ export default function UsersList() {
     // UPDATED: Use global confirm
     if (!await confirm({ title: 'Delete User', message: 'Are you sure you want to delete this user?', danger: true })) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/users/${id}`, {
+      const res = await fetch(`${settings.apiBaseUrl}/users/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${state.accessToken}` }
       });
@@ -126,8 +132,8 @@ export default function UsersList() {
     }
 
     const url = editingUser
-      ? `${import.meta.env.VITE_API_URL}/users/${editingUser.id}`
-      : `${import.meta.env.VITE_API_URL}/users`;
+      ? `${settings.apiBaseUrl}/users/${editingUser.id}`
+      : `${settings.apiBaseUrl}/users`;
 
     const method = editingUser ? 'PUT' : 'POST';
 
@@ -185,14 +191,39 @@ export default function UsersList() {
       selector: (row: any) => row.role,
       sortable: true,
       cell: (row: any) => (
-        <span style={{
-          padding: '0.25rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.75rem',
-          backgroundColor: '#334155', color: '#e2e8f0'
-        }}>
-          {row.role}
-        </span>
+        <div>
+          <div style={{
+            padding: '0.25rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.75rem',
+            backgroundColor: '#334155', color: '#e2e8f0', display: 'inline-block'
+          }}>
+            {row.role}
+          </div>
+          {row.role_owner_name && (
+            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+              by {row.role_owner_name}
+            </div>
+          )}
+        </div>
       )
     },
+  ];
+
+  // Add Parent column for Admin users only
+  const isAdmin = state.user?.role_id === 1;
+  if (isAdmin) {
+    columns.push({
+      name: 'Parent',
+      selector: (row: any) => row.parent_name || '-',
+      sortable: true,
+      cell: (row: any) => (
+        <span style={{ fontSize: '0.875rem', color: row.parent_name ? '#64748b' : '#94a3b8' }}>
+          {row.parent_name || '-'}
+        </span>
+      )
+    } as any);
+  }
+
+  columns.push(
     {
       name: 'Status',
       selector: (row: any) => row.status,
@@ -219,7 +250,7 @@ export default function UsersList() {
               <Edit2 size={16} />
             </button>
           )}
-          {canDelete && (
+          {canDelete && row.id !== state.user?.id && (
             <button
               onClick={() => handleDelete(row.id)}
               style={{ padding: '0.5rem', borderRadius: '0.375rem', backgroundColor: '#ef4444', border: 'none', color: 'white', cursor: 'pointer' }}
@@ -230,7 +261,7 @@ export default function UsersList() {
         </div>
       )
     }
-  ];
+  );
 
   if (!canView) return <div style={{ padding: '2rem', color: 'white' }}>Permission denied</div>;
 
@@ -328,12 +359,18 @@ export default function UsersList() {
                 onChange={e => setFormData({ ...formData, role_id: e.target.value })}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', outline: 'none', boxSizing: 'border-box' }}
                 required
+                disabled={editingUser?.id === state.user?.id}
               >
                 <option value="">Select Role</option>
                 {roles.map(r => (
                   <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
+              {editingUser?.id === state.user?.id && (
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                  You cannot change your own role
+                </div>
+              )}
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Status</label>
@@ -341,12 +378,50 @@ export default function UsersList() {
                 value={formData.status}
                 onChange={e => setFormData({ ...formData, status: e.target.value })}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', outline: 'none', boxSizing: 'border-box' }}
+                disabled={editingUser?.id === state.user?.id}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+              {editingUser?.id === state.user?.id && (
+                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
+                  You cannot change your own status
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Tally Configuration - Show only for Tally User role (role_id === 2 or role name === "Tally User") */}
+          {(formData.role_id === '2' || roles.find(r => r.id === parseInt(formData.role_id))?.name === 'Tally User') && (
+            <div style={{ padding: '1rem', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '0.5rem' }}>
+              <div style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#0369a1', fontWeight: 500 }}>Tally Configuration</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Tally URL</label>
+                  <input
+                    type="text"
+                    value={formData.tally_url}
+                    onChange={e => setFormData({ ...formData, tally_url: e.target.value })}
+                    placeholder="http://localhost"
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Tally Port</label>
+                  <input
+                    type="text"
+                    value={formData.tally_port}
+                    onChange={e => setFormData({ ...formData, tally_port: e.target.value })}
+                    placeholder="9000"
+                    style={{ width: '100%', padding: '0.75rem', borderRadius: '0.375rem', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#64748b' }}>
+                User can update these settings later from their Settings page.
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
             <button

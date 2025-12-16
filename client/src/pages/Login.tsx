@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
+import PageTitle from '../components/PageTitle';
 import '../index.css';
 
 export default function Login() {
@@ -48,7 +49,11 @@ export default function Login() {
 
       if (res.ok) {
         const payload = JSON.parse(atob(data.accessToken.split('.')[1]));
-        dispatch({ type: 'LOGIN', accessToken: data.accessToken, user: { email: payload.email } });
+        dispatch({
+          type: 'LOGIN',
+          accessToken: data.accessToken,
+          user: { id: payload.sub, email: payload.email, role_id: payload.role_id }
+        });
 
         toast.success(`Welcome back, ${payload.email || 'User'}!`, { id: toastId });
         navigate(from, { replace: true });
@@ -67,6 +72,7 @@ export default function Login() {
 
   return (
     <div className="login-container" style={{ flexDirection: 'column', gap: '2rem' }}>
+      <PageTitle title="Login" />
       <div className="login-card">
         <div className="login-header" style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
           {settings.logoUrl ? (

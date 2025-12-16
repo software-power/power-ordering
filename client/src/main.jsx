@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import ProductsList from "./pages/ProductsList";
+import OrdersList from "./pages/OrdersList";
 import UsersList from "./pages/UsersList";
 import RolesList from "./pages/RolesList";
 import Settings from "./pages/Settings";
@@ -51,6 +52,9 @@ ReactDOM.createRoot(rootElement).render(
                 >
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/products/list" element={<ProductsList />} />
+                  <Route path="/orders" element={<OrdersList />} />
+                  <Route path="/orders/list" element={<OrdersList />} />
+                  <Route path="/orders/create" element={<OrdersList />} />
                   <Route path="/roles/list" element={<RolesList />} />
                   <Route path="/users/list" element={<UsersList />} />
                   <Route path="/settings" element={<Settings />} />

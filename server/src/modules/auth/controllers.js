@@ -10,13 +10,31 @@ const signRefresh = (id) => jwt.sign({ sub: id }, env.JWT_REFRESH_SECRET, { expi
 
 export async function login(req, res) {
   const { username, email, password } = req.body;
+
+  // Check user status AND parent status (if user has a parent)
   const [rows] = await pool.query(
-    `SELECT u.id, u.email, u.password_hash, u.role_id
-     FROM users u WHERE ${email ? 'u.email = ?' : 'u.username = ?'} AND u.status='active' LIMIT 1`,
+    `SELECT u.id, u.email, u.password_hash, u.role_id, u.status, u.parent_id, 
+            p.status as parent_status
+     FROM users u 
+     LEFT JOIN users p ON u.parent_id = p.id
+     WHERE ${email ? 'u.email = ?' : 'u.username = ?'} 
+     LIMIT 1`,
     [email || username]
   );
+
   const user = rows[0];
   if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+
+  // Check if user is inactive
+  if (user.status !== 'active') {
+    return res.status(401).json({ message: 'Your account is inactive. Please contact your administrator.' });
+  }
+
+  // Check if parent is inactive (for employees)
+  if (user.parent_id && user.parent_status !== 'active') {
+    return res.status(401).json({ message: 'Your parent account is inactive. Please contact your administrator.' });
+  }
+
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
 
@@ -33,17 +51,37 @@ export async function refreshToken(req, res) {
   try {
     const payload = jwt.verify(token, env.JWT_REFRESH_SECRET);
     const userId = payload.sub;
-    const [rows] = await pool.query(`SELECT email, role_id FROM users WHERE id=? AND status='active'`, [userId]);
+
+    // Check user status AND parent status
+    const [rows] = await pool.query(
+      `SELECT u.id, u.email, u.role_id, u.status, u.parent_id, p.status as parent_status
+       FROM users u 
+       LEFT JOIN users p ON u.parent_id = p.id
+       WHERE u.id=?`,
+      [userId]
+    );
+
     const user = rows[0];
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+    // Check if user is inactive
+    if (user.status !== 'active') {
+      return res.status(401).json({ message: 'Your account is inactive. Please login again.' });
+    }
+
+    // Check if parent is inactive (for employees)
+    if (user.parent_id && user.parent_status !== 'active') {
+      return res.status(401).json({ message: 'Your parent account is inactive. Please login again.' });
+    }
+
     const [permRows] = await pool.query(
       `SELECT p.action FROM permissions p JOIN role_permissions rp ON rp.permission_id = p.id WHERE rp.role_id = ?`,
       [user.role_id]
     );
     const perms = permRows.map(p => p.action);
-    res.json({ accessToken: signAccess(userId, user.email, user.role_id, perms) });
-  } catch {
-    res.status(401).json({ message: 'Unauthorized' });
+    res.json({ accessToken: signAccess(user.id, user.email, user.role_id, perms) });
+  } catch (e) {
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 }
 
@@ -67,7 +105,19 @@ export async function resetPassword(req, res) {
   const rec = rows[0];
   if (!rec || new Date(rec.expires_at) < new Date()) return res.status(400).json({ message: 'Invalid or expired token' });
   const hash = await bcrypt.hash(newPassword, 12);
-  await pool.query(`UPDATE users SET password_hash=? WHERE id=?`, [hash, rec.user_id]);
   await pool.query(`DELETE FROM password_reset_tokens WHERE token=?`, [token]);
   res.json({ message: 'Password updated' });
+}
+
+export async function getProfile(req, res) {
+  const userId = req.user.sub;
+  const [rows] = await pool.query(
+    `SELECT u.id, u.fullname, u.username, u.email, u.phone, u.role_id, u.parent_id, u.is_centraluser, u.tally_url, u.tally_port, r.name as role 
+     FROM users u 
+     LEFT JOIN roles r ON r.id = u.role_id 
+     WHERE u.id = ?`,
+    [userId]
+  );
+  if (!rows.length) return res.status(404).json({ message: 'User not found' });
+  res.json(rows[0]);
 }

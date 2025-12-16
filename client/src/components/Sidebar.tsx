@@ -51,6 +51,15 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             { id: 22, name: 'Categories', path: '/products/categories' }
           ]
         },
+        {
+          id: 6,
+          name: 'Orders',
+          icon: 'shopping-cart',
+          children: [
+            { id: 61, name: 'All Orders', path: '/orders/list' },
+            { id: 62, name: 'Create Order', path: '/orders/create' }
+          ]
+        },
         { id: 3, name: 'Users', path: '/users/list', icon: 'users' },
         { id: 4, name: 'Roles', path: '/roles/list', icon: 'shield' },
         { id: 5, name: 'Settings', path: '/settings', icon: 'settings' },

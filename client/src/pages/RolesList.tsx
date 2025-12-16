@@ -4,12 +4,14 @@ import { usePermission } from '../rbac/usePermission';
 import Modal from '../components/Modal';
 import DataTableComponent from '../components/DataTable';
 import toast from 'react-hot-toast';
-import { Edit2, Trash2, Plus } from 'lucide-react';
-
+import { Edit2, Trash2, Plus, Check, X } from 'lucide-react';
 import { useConfirm } from '../context/ConfirmContext';
+import { useSettings } from '../context/SettingsContext';
+import PageTitle from '../components/PageTitle';
 
 export default function RolesList() {
     const { state } = useAuth();
+    const { settings } = useSettings();
     const confirm = useConfirm();
     const canView = usePermission('role.view');
     const canAdd = usePermission('role.add');
@@ -19,19 +21,27 @@ export default function RolesList() {
     const [roles, setRoles] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // Meta Data for Permissions UI
+    const [meta, setMeta] = useState<{ menus: any[], submenus: any[], permissions: any[] }>({ menus: [], submenus: [], permissions: [] });
+    const [metaLoading, setMetaLoading] = useState(false);
+
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<any>(null);
-    const [formData, setFormData] = useState({ name: '', status: 'active' });
+    const [formData, setFormData] = useState({ name: '', status: 'active', permission_ids: [] as number[], submenu_ids: [] as number[], is_client_accessible: true });
+    const isAdmin = state.user?.role_id === 1;
 
     useEffect(() => {
-        if (canView) fetchRoles();
+        if (canView) {
+            fetchRoles();
+            fetchMeta();
+        }
     }, [canView, state.accessToken]);
 
     async function fetchRoles() {
         setLoading(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/roles`, {
+            const res = await fetch(`${settings.apiBaseUrl}/roles`, {
                 headers: { Authorization: `Bearer ${state.accessToken}` }
             });
             if (res.ok) {
@@ -47,22 +57,71 @@ export default function RolesList() {
         }
     }
 
-    const handleEdit = (role: any) => {
+    async function fetchMeta() {
+        setMetaLoading(true);
+        try {
+            const res = await fetch(`${settings.apiBaseUrl}/roles/meta`, {
+                headers: { Authorization: `Bearer ${state.accessToken}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setMeta(data);
+            }
+        } catch (e) {
+            console.error('Failed to load meta', e);
+        } finally {
+            setMetaLoading(false);
+        }
+    }
+
+    const handleEdit = async (role: any) => {
         setEditingRole(role);
-        setFormData({ name: role.name, status: role.status || 'active' });
+        // Fetch current permissions for this role
+        let assigned: number[] = [];
+        try {
+            const res = await fetch(`${settings.apiBaseUrl}/roles/${role.id}/permissions`, {
+                headers: { Authorization: `Bearer ${state.accessToken}` }
+            });
+            if (res.ok) {
+                assigned = await res.json();
+            }
+        } catch (e) {
+            console.error('Failed to fetch role permissions', e);
+        }
+
+        // Fetch assigned submenus
+        let assignedSubmenus: number[] = [];
+        try {
+            const res2 = await fetch(`${settings.apiBaseUrl}/roles/${role.id}/submenus`, {
+                headers: { Authorization: `Bearer ${state.accessToken}` }
+            });
+            if (res2.ok) {
+                assignedSubmenus = await res2.json();
+            }
+        } catch (e) {
+            console.error('Failed to fetch role submenus', e);
+        }
+
+        setFormData({
+            name: role.name,
+            status: role.status || 'active',
+            permission_ids: assigned,
+            submenu_ids: assignedSubmenus,
+            is_client_accessible: role.is_client_accessible === 1 || role.is_client_accessible === true
+        });
         setIsModalOpen(true);
     };
 
     const handleAdd = () => {
         setEditingRole(null);
-        setFormData({ name: '', status: 'active' });
+        setFormData({ name: '', status: 'active', permission_ids: [], submenu_ids: [], is_client_accessible: true });
         setIsModalOpen(true);
     };
 
     const handleDelete = async (id: number) => {
         if (!await confirm({ title: 'Delete Role', message: 'Are you sure you want to delete this role?', danger: true })) return;
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/roles/${id}`, {
+            const res = await fetch(`${settings.apiBaseUrl}/roles/${id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${state.accessToken}` }
             });
@@ -82,8 +141,8 @@ export default function RolesList() {
         if (!formData.name) return toast.error('Role name is required');
 
         const url = editingRole
-            ? `${import.meta.env.VITE_API_URL}/roles/${editingRole.id}`
-            : `${import.meta.env.VITE_API_URL}/roles`;
+            ? `${settings.apiBaseUrl}/roles/${editingRole.id}`
+            : `${settings.apiBaseUrl}/roles`;
 
         const method = editingRole ? 'PUT' : 'POST';
 
@@ -110,9 +169,68 @@ export default function RolesList() {
         }
     };
 
+    // Permission Handlers
+    const togglePermission = (id: number) => {
+        setFormData(prev => {
+            const has = prev.permission_ids.includes(id);
+            return {
+                ...prev,
+                permission_ids: has ? prev.permission_ids.filter(p => p !== id) : [...prev.permission_ids, id]
+            };
+        });
+    };
+
+    const toggleMenu = (menuId: number, check: boolean) => {
+        // Find all permission IDs for this menu
+        const permIds = meta.permissions.filter(p => p.menu_id === menuId).map(p => p.id);
+        setFormData(prev => {
+            const current = new Set(prev.permission_ids);
+            if (check) {
+                permIds.forEach(id => current.add(id));
+            } else {
+                permIds.forEach(id => current.delete(id));
+            }
+            return { ...prev, permission_ids: Array.from(current) };
+        });
+    };
+
+    const toggleSubmenu = (id: number) => {
+        setFormData(prev => {
+            const has = prev.submenu_ids.includes(id);
+            return {
+                ...prev,
+                submenu_ids: has ? prev.submenu_ids.filter(s => s !== id) : [...prev.submenu_ids, id]
+            };
+        });
+    };
+
+    const checkAll = () => {
+        const allIds = meta.permissions.map(p => p.id);
+        const allSubmenus = meta.submenus.map(s => s.id);
+        setFormData(prev => ({ ...prev, permission_ids: allIds, submenu_ids: allSubmenus }));
+    };
+
+    const uncheckAll = () => {
+        setFormData(prev => ({ ...prev, permission_ids: [], submenu_ids: [] }));
+    };
+
     const columns = [
         { name: 'ID', selector: (row: any) => row.id, sortable: true, width: '80px' },
         { name: 'Name', selector: (row: any) => row.name, sortable: true },
+        {
+            name: 'Owner',
+            selector: (row: any) => row.owner_name || 'System',
+            sortable: true,
+            cell: (row: any) => (
+                <span style={{
+                    fontSize: '0.875rem',
+                    color: row.owner_name ? '#64748b' : '#8b5cf6',
+                    fontWeight: row.owner_name ? 400 : 500
+                }}>
+                    {row.owner_name || 'System'}
+                </span>
+            )
+        },
         {
             name: 'Status',
             selector: (row: any) => row.status,
@@ -150,13 +268,23 @@ export default function RolesList() {
                 </div>
             )
         }
-
     ];
 
     if (!canView) return <div style={{ padding: '2rem', color: 'white' }}>Permission denied</div>;
 
+    // Helper to check if a menu is fully checked, partially checked, or unchecked
+    const getMenuCheckState = (menuId: number) => {
+        const permIds = meta.permissions.filter(p => p.menu_id === menuId).map(p => p.id);
+        if (permIds.length === 0) return 'unchecked';
+        const checkedCount = permIds.filter(id => formData.permission_ids.includes(id)).length;
+        if (checkedCount === permIds.length) return 'checked';
+        if (checkedCount > 0) return 'partial';
+        return 'unchecked';
+    };
+
     return (
         <div style={{ padding: '2rem', color: '#e2e8f0' }}>
+            <PageTitle title="Roles" />
             <DataTableComponent
                 title="Roles"
                 columns={columns}
@@ -183,39 +311,137 @@ export default function RolesList() {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 title={editingRole ? 'Edit Role' : 'Create Role'}
+                maxWidth="1000px"
             >
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Role Name</label>
-                        <input
-                            type="text"
-                            value={formData.name}
-                            onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            style={{
-                                width: '100%', padding: '0.75rem', borderRadius: '0.375rem',
-                                backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b',
-                                outline: 'none', boxSizing: 'border-box'
-                            }}
-                            placeholder="e.g. Manager"
-                            required
-                        />
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%', maxWidth: '1000px' }}>
+
+                    {/* Role Details */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Role Name</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '0.375rem',
+                                    backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b',
+                                    outline: 'none', boxSizing: 'border-box'
+                                }}
+                                placeholder="e.g. Sales Person"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Status</label>
+                            <select
+                                value={formData.status}
+                                onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '0.375rem',
+                                    backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b',
+                                    outline: 'none', boxSizing: 'border-box'
+                                }}
+                            >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
                     </div>
+
+                    {/* Is Client Accessible Checkbox (Admin Only) */}
+                    {isAdmin && (
+                        <div style={{ padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.is_client_accessible}
+                                    onChange={e => setFormData({ ...formData, is_client_accessible: e.target.checked })}
+                                    style={{ cursor: 'pointer' }}
+                                />
+                                <span style={{ fontSize: '0.875rem', color: '#1e293b', fontWeight: 500 }}>Is Client Accessible</span>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>(Allow Tally Users to see and assign this role)</span>
+                            </label>
+                        </div>
+                    )}
+
+                    {/* Permissions Grid */}
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.875rem', color: '#475569', marginBottom: '0.5rem', fontWeight: 500 }}>Status</label>
-                        <select
-                            value={formData.status}
-                            onChange={e => setFormData({ ...formData, status: e.target.value })}
-                            style={{
-                                width: '100%', padding: '0.75rem', borderRadius: '0.375rem',
-                                backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#1e293b',
-                                outline: 'none', boxSizing: 'border-box'
-                            }}
-                        >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <label style={{ fontSize: '0.875rem', color: '#475569', fontWeight: 600 }}>Role Permissions</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button type="button" onClick={checkAll} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', backgroundColor: '#3b82f6', color: 'white', borderRadius: '0.25rem', border: 'none', cursor: 'pointer' }}>Check all</button>
+                                <button type="button" onClick={uncheckAll} style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', backgroundColor: '#ef4444', color: 'white', borderRadius: '0.25rem', border: 'none', cursor: 'pointer' }}>Uncheck all</button>
+                            </div>
+                        </div>
+
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.5rem', maxHeight: '400px', overflowY: 'auto' }}>
+                            {/* Header */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(150px, 1fr) 2fr', backgroundColor: '#f8fafc', padding: '0.75rem', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0 }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Menu</div>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Submenu(s)</div>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Permissions</div>
+                            </div>
+
+                            {/* Rows */}
+                            {meta.menus.map(menu => {
+                                const submenus = meta.submenus.filter(s => s.menu_id === menu.id);
+                                const permissions = meta.permissions.filter(p => p.menu_id === menu.id);
+                                if (permissions.length === 0 && submenus.length === 0) return null; // Skip empty
+
+                                const menuState = getMenuCheckState(menu.id);
+
+                                return (
+                                    <div key={menu.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 1fr) minmax(150px, 1fr) 2fr', borderBottom: '1px solid #f1f5f9', padding: '0.75rem', alignItems: 'start' }}>
+                                        {/* Menu Column */}
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={menuState === 'checked'}
+                                                ref={el => { if (el) el.indeterminate = menuState === 'partial'; }}
+                                                onChange={(e) => toggleMenu(menu.id, e.target.checked)}
+                                                style={{ cursor: 'pointer' }}
+                                            />
+                                            <span style={{ fontSize: '0.875rem', color: '#1e293b', fontWeight: 500 }}>{menu.name}</span>
+                                        </div>
+
+                                        {/* Submenus Column */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                            {submenus.map(sub => (
+                                                <label key={sub.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.submenu_ids.includes(sub.id)}
+                                                        onChange={() => toggleSubmenu(sub.id)}
+                                                        style={{ cursor: 'pointer' }}
+                                                    />
+                                                    <span style={{ fontSize: '0.875rem', color: '#64748b' }}>{sub.name}</span>
+                                                </label>
+                                            ))}
+                                            {submenus.length === 0 && <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>-</span>}
+                                        </div>
+
+                                        {/* Permissions Column */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
+                                            {permissions.map(perm => (
+                                                <label key={perm.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.permission_ids.includes(perm.id)}
+                                                        onChange={() => togglePermission(perm.id)}
+                                                        style={{ cursor: 'pointer' }}
+                                                    />
+                                                    <span style={{ fontSize: '0.875rem', color: '#475569' }}>{perm.label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
+
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'flex-end', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
                         <button
                             type="button"
                             onClick={() => setIsModalOpen(false)}
@@ -241,3 +467,4 @@ export default function RolesList() {
         </div>
     );
 }
+

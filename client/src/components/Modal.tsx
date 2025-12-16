@@ -6,9 +6,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  maxWidth?: string;
 }
 
-export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, maxWidth }: ModalProps) {
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -35,7 +36,7 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
         borderRadius: '0.75rem',
         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
         width: '100%',
-        maxWidth: '550px',
+        maxWidth: maxWidth || '550px',
         margin: '1rem',
         color: '#1e293b', // Slate-800 text
         overflow: 'hidden',
