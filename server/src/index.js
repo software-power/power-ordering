@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
 import authRoutes from './modules/auth/routes.js';
 import menuRoutes from './modules/menus/routes.js';
@@ -27,7 +29,29 @@ app.use("/tally", tallyRoutes);
 app.use("/products", productRoutes);
 app.use("/orders", orderRoutes);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
 app.get('/health', (_, res) => res.json({ ok: true }));
+
+// The "catch-all" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+// app.get('/:path*', (req, res) => {
+//   res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+// });
+
+app.use((req, res, next) => {
+  // If the request is for an API (starts with your defined routes), skip this
+  const apiRoutes = ['/auth', '/menus', '/users', '/roles', '/settings', '/tally', '/products', '/orders', '/health'];
+  if (apiRoutes.some(route => req.path.startsWith(route))) {
+    return next();
+  }
+  // Otherwise, send the index.html
+  res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+});
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ message: err.message || 'Server error' });

@@ -1,3 +1,7 @@
-// Dynamically determine API URL based on current hostname
-const baseUrl = import.meta.env.VITE_API_URL || 'http://10.10.100.243:4000';
-export const API_URL = baseUrl.replace('10.10.100.243', window.location.hostname);
+// Detect if we are in development (port 5173) or production (server serving app)
+const isDev = window.location.port === '5173';
+
+// If dev, talk to port 4000. If production, talk to the same host/port serving the app.
+export const API_URL = isDev
+    ? `${window.location.protocol}//${window.location.hostname}:4000`
+    : `${window.location.origin}`;
