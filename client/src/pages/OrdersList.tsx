@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import DataTableComponent from '../components/DataTable';
 import PageTitle from '../components/PageTitle';
@@ -11,6 +12,7 @@ import { usePermission } from '../rbac/usePermission';
 
 export default function OrdersList() {
     const { state } = useAuth();
+    const navigate = useNavigate();
     const { settings } = useSettings();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -141,7 +143,7 @@ export default function OrdersList() {
                         )}
                         {canAdd && (
                             <button
-                                onClick={() => setIsModalOpen(true)}
+                                onClick={() => navigate('/catalogue')}
                                 style={{
                                     display: 'flex', alignItems: 'center', gap: '0.5rem',
                                     backgroundColor: '#3b82f6', color: 'white', padding: '0.5rem 1rem',

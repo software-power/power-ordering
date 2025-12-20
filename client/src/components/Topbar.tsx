@@ -2,12 +2,16 @@
 import { useAuth } from '../auth/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useState } from 'react';
-import { LogOut, Palette, User, Menu } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, Palette, User, Menu, ShoppingCart } from 'lucide-react';
 import ThemeSettings from './ThemeSettings';
+import { useCart } from '../context/CartContext';
 
 export default function Topbar({ title, onToggleSidebar }: { title: string, onToggleSidebar: () => void }) {
     const { state, logout } = useAuth();
     const { settings } = useSettings();
+    const { cartItems } = useCart();
+    const navigate = useNavigate();
     const [showThemeSettings, setShowThemeSettings] = useState(false);
 
     return (
@@ -38,6 +42,24 @@ export default function Topbar({ title, onToggleSidebar }: { title: string, onTo
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <button
+                    onClick={() => navigate('/cart')}
+                    style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                >
+                    <ShoppingCart size={24} />
+                    {cartItems.length > 0 && (
+                        <span style={{
+                            position: 'absolute', top: -8, right: -8,
+                            backgroundColor: '#ef4444', color: 'white',
+                            borderRadius: '50%', width: '18px', height: '18px',
+                            fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontWeight: 'bold'
+                        }}>
+                            {cartItems.length}
+                        </span>
+                    )}
+                </button>
+
                 <div style={{ position: 'relative' }}>
                     <button
                         onClick={() => setShowThemeSettings(!showThemeSettings)}

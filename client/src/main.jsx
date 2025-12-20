@@ -15,7 +15,11 @@ import Settings from "./pages/Settings";
 import ProtectedRoute from "./router/ProtectedRoute";
 import Layout from "./components/Layout";
 import { ConfirmProvider } from "./context/ConfirmContext";
+import { CartProvider } from "./context/CartContext.jsx";
 import { Toaster } from 'react-hot-toast';
+import ProductCatalogue from "./pages/ProductCatalogue.jsx";
+import Cart from "./pages/Cart.jsx";
+import OrderHistory from "./pages/OrderHistory.jsx";
 
 const rootElement = document.getElementById("root");
 
@@ -26,42 +30,47 @@ ReactDOM.createRoot(rootElement).render(
       <SettingsProvider>
         <ThemeProvider>
           <ConfirmProvider>
-            <BrowserRouter>
-              <Routes>
-                {/* Public route */}
-                <Route path="/login" element={<Login />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
+            <CartProvider>
+              <BrowserRouter>
+                <Routes>
+                  {/* Public route */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
 
-                {/* Root path: redirect to dashboard if logged in */}
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <Navigate to="/dashboard" replace />
-                    </ProtectedRoute>
-                  }
-                />
+                  {/* Root path: redirect to dashboard if logged in */}
+                  <Route
+                    path="/"
+                    element={
+                      <ProtectedRoute>
+                        <Navigate to="/dashboard" replace />
+                      </ProtectedRoute>
+                    }
+                  />
 
-                {/* Protected routes inside Layout */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <Layout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/products/list" element={<ProductsList />} />
-                  <Route path="/orders" element={<OrdersList />} />
-                  <Route path="/orders/list" element={<OrdersList />} />
-                  <Route path="/orders/create" element={<OrdersList />} />
-                  <Route path="/roles/list" element={<RolesList />} />
-                  <Route path="/users/list" element={<UsersList />} />
-                  <Route path="/settings" element={<Settings />} />
-                  {/* Add more protected routes here */}
-                </Route>
-              </Routes>
-            </BrowserRouter>
+                  {/* Protected routes inside Layout */}
+                  <Route
+                    element={
+                      <ProtectedRoute>
+                        <Layout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/products/list" element={<ProductsList />} />
+                    <Route path="/catalogue" element={<ProductCatalogue />} />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route path="/my-orders" element={<OrderHistory />} />
+                    <Route path="/orders" element={<OrdersList />} />
+                    <Route path="/orders/list" element={<OrdersList />} />
+                    <Route path="/orders/create" element={<OrdersList />} />
+                    <Route path="/roles/list" element={<RolesList />} />
+                    <Route path="/users/list" element={<UsersList />} />
+                    <Route path="/settings" element={<Settings />} />
+                    {/* Add more protected routes here */}
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </CartProvider>
           </ConfirmProvider>
         </ThemeProvider>
       </SettingsProvider>
