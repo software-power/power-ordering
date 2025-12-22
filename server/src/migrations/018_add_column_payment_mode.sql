@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN payment_mode VARCHAR(50) DEFAULT 'Cash' after net_amount;

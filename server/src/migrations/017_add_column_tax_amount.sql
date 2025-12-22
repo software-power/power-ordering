@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN tax_amount DECIMAL(10,2) DEFAULT 0.00 after total_amount;
