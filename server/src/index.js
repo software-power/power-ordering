@@ -14,6 +14,7 @@ import tallyRoutes from "./modules/tally/routes.js";
 import productRoutes from "./modules/products/routes.js";
 import orderRoutes from "./modules/orders/routes.js";
 import integrationRoutes from "./modules/integration/routes.js";
+import masterRoutes from "./modules/masters/routes.js";
 
 const app = express();
 app.use(cors());
@@ -30,6 +31,7 @@ app.use("/tally", tallyRoutes);
 app.use("/products", productRoutes);
 app.use("/orders", orderRoutes);
 app.use("/integration", integrationRoutes);
+app.use("/masters", masterRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,7 +49,7 @@ app.get('/health', (_, res) => res.json({ ok: true }));
 
 app.use((req, res, next) => {
   // If the request is for an API (starts with your defined routes), skip this
-  const apiRoutes = ['/auth', '/menus', '/users', '/roles', '/settings', '/tally', '/products', '/orders', '/integration', '/health'];
+  const apiRoutes = ['/auth', '/menus', '/users', '/roles', '/settings', '/tally', '/products', '/orders', '/integration', '/health', '/masters'];
   if (apiRoutes.some(route => req.path.startsWith(route))) {
     return next();
   }

@@ -19,8 +19,18 @@ export async function listProducts(req, res) {
         params.push(userId, userId);
     }
 
-    const [rows] = await pool.query(query, params);
-    res.json(rows);
+    const [products] = await pool.query(query, params);
+
+    if (products.length > 0) {
+        const productIds = products.map(p => p.id);
+        const [prices] = await pool.query(`SELECT * FROM product_prices WHERE product_id IN (?)`, [productIds]);
+
+        products.forEach(p => {
+            p.prices = prices.filter(price => price.product_id === p.id);
+        });
+    }
+
+    res.json(products);
 }
 
 export async function createProduct(req, res) {

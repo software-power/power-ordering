@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import PageTitle from '../components/PageTitle';
 import { useSettings } from '../context/SettingsContext';
@@ -14,6 +14,38 @@ export default function Cart() {
     const [customerName, setCustomerName] = useState(state.user?.fullname || '');
     const [loading, setLoading] = useState(false);
 
+    const [orderType, setOrderType] = useState('Standard');
+    const [productsCache, setProductsCache] = useState([]);
+    const [priceLevels, setPriceLevels] = useState([]);
+
+    // Fetch products to get pricelists
+    useEffect(() => {
+        if (state.accessToken) {
+            fetch(`${settings.apiBaseUrl}/products`, {
+                headers: { Authorization: `Bearer ${state.accessToken}` }
+            }).then(res => res.json()).then(setProductsCache).catch(console.error);
+
+            fetch(`${settings.apiBaseUrl}/masters/price-levels`, {
+                headers: { Authorization: `Bearer ${state.accessToken}` }
+            }).then(res => res.json()).then(setPriceLevels).catch(console.error);
+        }
+    }, [state.accessToken, settings.apiBaseUrl]);
+
+    // Calculate effective items with selected price level
+    const effectiveItems = cartItems.map(item => {
+        const product = productsCache.find(p => p.id === item.id);
+        let price = parseFloat(item.price) || 0; // Ensure price is a number
+
+        if (product && product.prices && orderType !== 'Standard') {
+            const priceEntry = product.prices.find(p => p.price_level === orderType);
+            if (priceEntry) price = parseFloat(priceEntry.price) || price;
+        }
+
+        return { ...item, price };
+    });
+
+    const effectiveTotal = effectiveItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
     const handleCheckout = async () => {
         if (cartItems.length === 0) return toast.error("Cart is empty");
 
@@ -21,13 +53,14 @@ export default function Cart() {
         try {
             const payload = {
                 customer_name: customerName,
-                items: cartItems.map(item => ({
+                price_level: orderType,
+                items: effectiveItems.map(item => ({
                     product_id: item.id,
                     qty: item.qty,
                     rate: item.price,
                     tax_rate: item.tax_rate || 0
                 })),
-                payment_mode: 'Online' // Default for now
+                payment_mode: 'Online'
             };
 
             const res = await fetch(`${settings.apiBaseUrl}/orders`, {
@@ -75,10 +108,10 @@ export default function Cart() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {cartItems.map(item => (
+                                {effectiveItems.map(item => (
                                     <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                         <td style={{ padding: '1rem' }}>{item.name}</td>
-                                        <td style={{ padding: '1rem' }}>TZS {item.price}</td>
+                                        <td style={{ padding: '1rem' }}>TZS {item.price.toFixed(2)}</td>
                                         <td style={{ padding: '1rem' }}>
                                             <input
                                                 type="number"
@@ -102,7 +135,7 @@ export default function Cart() {
                         <h3 style={{ marginBottom: '1rem' }}>Summary</h3>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                             <span>Subtotal</span>
-                            <span>TZS {cartTotal.toFixed(2)}</span>
+                            <span>TZS {effectiveTotal.toFixed(2)}</span>
                         </div>
                         <hr style={{ margin: '1rem 0', borderColor: '#e2e8f0' }} />
                         <div style={{ marginBottom: '1rem' }}>
@@ -112,6 +145,19 @@ export default function Cart() {
                                 onChange={e => setCustomerName(e.target.value)}
                                 style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.25rem' }}
                             />
+                        </div>
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Order Type (Price Level)</label>
+                            <select
+                                value={orderType}
+                                onChange={e => setOrderType(e.target.value)}
+                                style={{ width: '100%', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.25rem' }}
+                            >
+                                <option value="Standard">Standard</option>
+                                {priceLevels.map(level => (
+                                    <option key={level.id} value={level.name}>{level.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <button
                             onClick={handleCheckout}

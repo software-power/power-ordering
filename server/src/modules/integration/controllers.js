@@ -5,7 +5,7 @@ export async function getPendingOrders(req, res) {
     // Limit to 50 to avoid overwhelming
     try {
         const [orders] = await pool.query(`
-            SELECT o.*, u.tally_ledger_name, u.fullname as customer_name
+            SELECT o.*, u.tally_ledger_name, u.tally_sales_ledger, u.fullname as customer_name
             FROM orders o
             JOIN users u ON u.id = o.user_id
             WHERE o.status = 'Pending'
@@ -58,8 +58,8 @@ export async function updateOrderStatus(req, res) {
 }
 
 export async function syncProductsFromTally(req, res) {
-    const { products } = req.body; // Expecting array of { name, stock, price, tally_guid, ... }
-    const userId = req.user.sub; // The user running the sync (likely Admin or Tally User)
+    const { products } = req.body; // Expecting array of { name, stock, price, tally_guid, prices: [{level, price}] }
+    const userId = req.user.sub;
 
     if (!products || !Array.isArray(products)) {
         return res.status(400).json({ message: "Invalid products data" });
@@ -70,10 +70,7 @@ export async function syncProductsFromTally(req, res) {
         await connection.beginTransaction();
 
         for (const product of products) {
-            // Check if exists by tally_guid or name (for now name is safer unique key if GUID depends on Tally)
-            // Ideally use tally_guid unique constraint.
-            // Let's assume unique name for simplicity or upsert using name.
-
+            let productId;
             const [existing] = await connection.query(
                 `SELECT id FROM products WHERE name = ? AND user_id = ?`,
                 [product.name, userId]
@@ -81,16 +78,32 @@ export async function syncProductsFromTally(req, res) {
 
             if (existing.length > 0) {
                 // Update
+                productId = existing[0].id;
                 await connection.query(
                     `UPDATE products SET stock = ?, price = ?, tally_guid = ?, tally_stock_item_name = ? WHERE id = ?`,
-                    [product.stock, product.price, product.guid, product.name, existing[0].id]
+                    [product.stock, product.price, product.guid, product.name, productId]
                 );
             } else {
                 // Insert
-                await connection.query(
+                const [result] = await connection.query(
                     `INSERT INTO products (user_id, name, stock, price, tally_guid, tally_stock_item_name) VALUES (?, ?, ?, ?, ?, ?)`,
                     [userId, product.name, product.stock, product.price, product.guid, product.name]
                 );
+                productId = result.insertId;
+            }
+
+            // Sync Prices
+            if (product.prices && Array.isArray(product.prices)) {
+                for (const p of product.prices) {
+                    // Upsert price
+                    // We can use ON DUPLICATE KEY UPDATE but need valid syntax
+                    await connection.query(
+                        `INSERT INTO product_prices (product_id, price_level, price) 
+                         VALUES (?, ?, ?) 
+                         ON DUPLICATE KEY UPDATE price = VALUES(price)`,
+                        [productId, p.level, p.price]
+                    );
+                }
             }
         }
 
@@ -102,5 +115,27 @@ export async function syncProductsFromTally(req, res) {
         res.status(500).json({ message: "Failed to sync products" });
     } finally {
         connection.release();
+    }
+}
+
+export async function getPendingPriceLevels(req, res) {
+    const userId = req.user.sub;
+    try {
+        const [rows] = await pool.query(`SELECT * FROM price_levels WHERE user_id = ? AND sync_status = 'Pending Sync'`, [userId]);
+        res.json(rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error fetching pending price levels' });
+    }
+}
+
+export async function updatePriceLevelStatus(req, res) {
+    const { id, status } = req.body;
+    try {
+        await pool.query('UPDATE price_levels SET sync_status = ? WHERE id = ?', [status, id]);
+        res.json({ message: 'Status updated' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error updating status' });
     }
 }

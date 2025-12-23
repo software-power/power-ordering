@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPendingOrders, updateOrderStatus, syncProductsFromTally } from './controllers.js';
+import { getPendingOrders, updateOrderStatus, syncProductsFromTally, getPendingPriceLevels, updatePriceLevelStatus } from './controllers.js';
 import { requireAuth } from '../../middleware/auth.js';
 
 const router = express.Router();
@@ -12,5 +12,8 @@ router.use(requireAuth);
 router.get('/pending-orders', getPendingOrders);
 router.post('/update-order-status', updateOrderStatus);
 router.post('/sync-products', syncProductsFromTally);
+
+router.get('/pending-price-levels', getPendingPriceLevels);
+router.post('/update-price-level-status', updatePriceLevelStatus);
 
 export default router;

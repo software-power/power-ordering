@@ -10,7 +10,12 @@ export default function Settings() {
     const { state } = useAuth();
     const { settings, updateSettings, saveSettingsToServer, loading } = useSettings();
     const [activeTab, setActiveTab] = useState<'company' | 'api' | 'defaults' | 'tally'>('company');
-    const [tallyConfig, setTallyConfig] = useState({ tally_url: '', tally_port: '' });
+    const [tallyConfig, setTallyConfig] = useState({
+        tally_url: '',
+        tally_port: '',
+        tally_sales_ledger: '',
+        default_price_level: 'Standard'
+    });
     const [userRole, setUserRole] = useState<number | null>(null);
     const [parentId, setParentId] = useState<number | null>(null);
     const [testingTally, setTestingTally] = useState(false);
@@ -27,7 +32,9 @@ export default function Settings() {
                 setParentId(data.parent_id);
                 setTallyConfig({
                     tally_url: data.tally_url || 'http://localhost',
-                    tally_port: data.tally_port || '9000'
+                    tally_port: data.tally_port || '9000',
+                    tally_sales_ledger: data.tally_sales_ledger || '',
+                    default_price_level: data.default_price_level || 'Standard'
                 });
 
                 // Set default tab based on role
@@ -186,6 +193,28 @@ export default function Settings() {
                                     value={tallyConfig.tally_port}
                                     onChange={(e) => setTallyConfig({ ...tallyConfig, tally_port: e.target.value })}
                                 />
+                            </div>
+                            <div className="form-group">
+                                <label>Default Sales Ledger</label>
+                                <input
+                                    className="form-input"
+                                    value={tallyConfig.tally_sales_ledger || ''}
+                                    onChange={(e) => setTallyConfig({ ...tallyConfig, tally_sales_ledger: e.target.value })}
+                                    placeholder="e.g. Sales Account"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Default Price Level</label>
+                                <select
+                                    className="form-input"
+                                    value={tallyConfig.default_price_level || 'Standard'}
+                                    onChange={(e) => setTallyConfig({ ...tallyConfig, default_price_level: e.target.value })}
+                                >
+                                    <option value="Standard">Standard</option>
+                                    <option value="Wholesale">Wholesale</option>
+                                    <option value="Retail">Retail</option>
+                                    <option value="Distributor">Distributor</option>
+                                </select>
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '1rem' }}>

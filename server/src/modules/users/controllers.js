@@ -150,6 +150,8 @@ export async function updateUser(req, res) {
   if (is_centraluser !== undefined) { updates.push('is_centraluser=?'); values.push(is_centraluser || 0); }
   if (tally_url !== undefined) { updates.push('tally_url=?'); values.push(tally_url || null); }
   if (tally_port !== undefined) { updates.push('tally_port=?'); values.push(tally_port || null); }
+  if (req.body.tally_sales_ledger !== undefined) { updates.push('tally_sales_ledger=?'); values.push(req.body.tally_sales_ledger || null); }
+  if (req.body.default_price_level !== undefined) { updates.push('default_price_level=?'); values.push(req.body.default_price_level || 'Standard'); }
 
   updates.push('updator=?');
   values.push(req.user.sub);

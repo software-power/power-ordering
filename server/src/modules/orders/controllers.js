@@ -42,9 +42,10 @@ export async function listOrders(req, res) {
 }
 
 export async function createOrder(req, res) {
-    const { customer_name, items, payment_mode } = req.body;
-    // items: [{ product_id, qty, rate, tax_rate }]
+    const { customer_name, items, payment_mode, price_level } = req.body;
+    // items: [{ product_id, qty }] -- rate is now calculated server side or verified
     const userId = req.user.sub;
+    const selectedPriceLevel = price_level || 'Standard';
 
     if (!items || items.length === 0) {
         return res.status(400).json({ message: 'No items in order' });
@@ -54,40 +55,67 @@ export async function createOrder(req, res) {
     try {
         await connection.beginTransaction();
 
+        // fetch product details and prices
+        const productIds = items.map(i => i.product_id);
+        const [products] = await connection.query(`SELECT * FROM products WHERE id IN (?)`, [productIds]);
+        const [prices] = await connection.query(`SELECT * FROM product_prices WHERE product_id IN (?) AND price_level = ?`, [productIds, selectedPriceLevel]);
+
         // Calculate totals
         let totalAmount = 0;
         let taxAmount = 0;
         let netAmount = 0;
+        const processedItems = [];
 
-        items.forEach(item => {
-            const amount = item.qty * item.rate;
-            // Assuming tax_rate is percentage e.g. 5, 18
-            const tax = amount * (item.tax_rate / 100);
-            totalAmount += amount; // This is usually taxable value
+        for (const item of items) {
+            const product = products.find(p => p.id === item.product_id);
+            if (!product) continue;
+
+            const priceEntry = prices.find(p => p.product_id === item.product_id);
+            // Use specific price level if found, else fallback to base price
+            let rate = priceEntry ? parseFloat(priceEntry.price) : parseFloat(product.price);
+
+            // Allow client to override rate? For now, let's enforce server price or use client rate if valid?
+            // User requirement: "it picks the prices of the product based on what type chosen"
+            // So we trust the server selection.
+
+            const amount = item.qty * rate;
+            const taxRate = parseFloat(product.tax_rate || 0);
+            const tax = amount * (taxRate / 100);
+
+            totalAmount += amount;
             taxAmount += tax;
             netAmount += (amount + tax);
-        });
 
-        // Generate simple Order Number (e.g., ORD-Timestamp-UserId)
+            processedItems.push({
+                product_id: item.product_id,
+                qty: item.qty,
+                rate: rate,
+                amount: amount,
+                tax_rate: taxRate
+            });
+        }
+
+        // Generate simple Order Number
         const orderNumber = `ORD-${Date.now()}-${userId}`;
 
         const [orderResult] = await connection.query(
-            `INSERT INTO orders(user_id, customer_name, order_number, total_amount, tax_amount, net_amount, payment_mode, status) 
-             VALUES(?, ?, ?, ?, ?, ?, ?, 'Pending')`,
-            [userId, customer_name, orderNumber, totalAmount, taxAmount, netAmount, payment_mode || 'Cash']
+            `INSERT INTO orders(user_id, customer_name, order_number, total_amount, tax_amount, net_amount, payment_mode, status, price_level) 
+             VALUES(?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`,
+            [userId, customer_name, orderNumber, totalAmount, taxAmount, netAmount, payment_mode || 'Cash', selectedPriceLevel]
         );
 
         const orderId = orderResult.insertId;
 
-        // Insert Items
-        const itemValues = items.map(item => [
-            orderId, item.product_id, item.qty, item.rate, item.qty * item.rate, item.tax_rate
-        ]);
+        if (processedItems.length > 0) {
+            const itemValues = processedItems.map(item => [
+                orderId, item.product_id, item.qty, item.rate, item.amount, item.tax_rate
+            ]);
 
-        await connection.query(
-            `INSERT INTO order_items(order_id, product_id, qty, rate, amount, tax_rate) VALUES ?`,
-            [itemValues]
-        );
+            await connection.query(
+                `INSERT INTO order_items(order_id, product_id, qty, rate, amount, tax_rate) VALUES ?`,
+                [itemValues]
+            );
+        }
 
         await connection.commit();
         res.status(201).json({ message: 'Order created', orderId, orderNumber });

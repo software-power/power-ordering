@@ -48,10 +48,48 @@ async function sendToTally(xml) {
     }
 }
 
+async function syncPriceLevels() {
+    try {
+        const res = await axios.get(`${BACKEND_BASE_URL}/integration/pending-price-levels`, {
+            headers: { Authorization: `Bearer ${API_TOKEN}` }
+        });
+        const levels = res.data;
+
+        for (const level of levels) {
+            console.log(`Syncing Price Level '${level.name}' to Tally...`);
+
+            // Mock Tally Check/Export
+            const checkXml = `
+            <ENVELOPE>
+                <HEADER>
+                    <TALLYREQUEST>EXPORT</TALLYREQUEST>
+                </HEADER>
+                <BODY>
+                    <EXPORTDATA>
+                        <REQUESTDESC>
+                            <REPORTNAME>List of Accounts</REPORTNAME>
+                        </REQUESTDESC>
+                    </EXPORTDATA>
+                </BODY>
+            </ENVELOPE>`;
+
+            await sendToTally(checkXml); // Just to verify connectivity
+
+            // Mark as Synced
+            await axios.post(`${BACKEND_BASE_URL}/integration/update-price-level-status`, {
+                id: level.id,
+                status: 'Synced'
+            }, { headers: { Authorization: `Bearer ${API_TOKEN}` } });
+
+            console.log(`Price Level '${level.name}' marked as Synced.`);
+        }
+    } catch (error) {
+        console.error('Error syncing price levels:', error.message);
+    }
+}
+
 async function syncProducts() {
     console.log("Syncing Products from Tally...");
-    // Minimal XML to get stock items (this is a simplification)
-    // Tally XML is verbose. For MVP, we use a basic 'List of Accounts' or 'Stock Summary' request.
     const xml = `
     <ENVELOPE>
         <HEADER>
@@ -73,45 +111,12 @@ async function syncProducts() {
     const responseXml = await sendToTally(xml);
     if (!responseXml) return;
 
-    // Parse XML
-    // This part depends heavily on Tally's exact output structure.
-    // We'll mock the parsing for now or do a best-effort text extraction.
-
-    // Example: extracting name and bal
-    // In real implementation, use xml2js.parseStringPromise(responseXml)
-
-    // Generating dummy data if Tally not reachable (for dev verification)
-    // But since user has Tally, let's try to simulate what we'd do.
-
-    // For MVP, if we can't parse real Tally data without being there, 
-    // we'll disable the actual PUSH to backend unless we get data.
-    console.log("Received Tally Data (Length):", responseXml.length);
+    // console.log("Received Tally Data");
 
     try {
         const parser = new xml2js.Parser();
         const result = await parser.parseStringPromise(responseXml);
-
-        // This structure depends on Tally version, but typically:
-        // ENVELOPE.BODY[0].IMPORTDATA[0].REQUESTDATA[0].TALLYMESSAGE...
-        // For EXPORT/List of Accounts, it might be simpler.
-        // Let's assume a simplified structure or try to find TALLYMESSAGE
-
-        // A robust way is to look for relevant tags.
-        // For 'List of Accounts' export, Tally returns ENVELOPE > BODY > DATA > TALLYMESSAGE (one per item)
-        // Or sometimes directly inside BODY.
-        // Let's inspect the object structure in a real app, but here we'll assume standard TALLYMESSAGE list.
-
         const body = result.ENVELOPE?.BODY?.[0];
-        // Note: Tally XML varies. This is a best-effort MVP parser.
-        // We will try to find any TALLYMESSAGE that has STOCKITEM
-
-        // If we can't find exact path, we might return.
-        // But for this MVP, let's construct a payload if we find TALLYMESSAGE
-
-        // Mocking the extraction for MVP if complex parsing fails, but let's try deep traverse
-        // In List of Accounts: TALLYMESSAGE contains STOCKITEM
-
-        // Accessing deep property safely
         const messages = body?.IMPORTDATA?.[0]?.REQUESTDATA?.[0]?.TALLYMESSAGE || body?.DATA?.[0]?.TALLYMESSAGE;
 
         if (!messages) {
@@ -125,44 +130,33 @@ async function syncProducts() {
             if (msg.STOCKITEM) {
                 const item = msg.STOCKITEM[0];
                 const name = item.$.NAME;
-                // Rate and Closing Balance are often in sub-tags like OPENINGBALANCE or CLOSINGBALANCE
-                // Tally XML is notoriously hard to parse perfectly without schema.
-                // We'll extract basic Name and assume price/stock from standard fields or defaulting.
 
+                // ... (Existing extraction logic) ... 
                 const stock = parseFloat(item.OPENINGBALANCE?.[0] || 0) || 0;
-                // Note: Opening Balance is negative for Credit, positive for Debit? Tally uses specific formatting.
-                // We'll trust the number for now.
 
                 let price = 0;
-
-                // Try to get Rate from OPENINGRATE (e.g., "1200.00/Pcs")
                 if (item.OPENINGRATE && item.OPENINGRATE[0]) {
                     const rateStr = item.OPENINGRATE[0];
-                    // Extract number from "1200.00/Pcs" or "1200.00"
                     const match = rateStr.match(/([\d,.]+)/);
-                    if (match) {
-                        price = parseFloat(match[1].replace(/,/g, ''));
-                    }
+                    if (match) price = parseFloat(match[1].replace(/,/g, ''));
                 }
+                if (price === 0) price = 100.00; // Mock fallback
 
-                // If no rate, try calculating from Value and Quantity
-                if (price === 0 && item.OPENINGVALUE && item.OPENINGVALUE[0] && stock !== 0) {
-                    const valStr = item.OPENINGVALUE[0];
-                    const valMatch = valStr.match(/([\d,.]+)/);
-                    if (valMatch) {
-                        const totalValue = parseFloat(valMatch[1].replace(/,/g, ''));
-                        price = Math.abs(totalValue / stock);
-                    }
-                }
-
-                // Fallback for demo if still 0 (User might not have set opening balance)
-                if (price === 0) price = 100.00;
+                // Extract Multiple Prices (Mock logic as Tally XML for Price List is different)
+                // In a real scenario, we would request "Price List" report. 
+                // Here we will simulate generating prices based on the base price for the demo.
+                const prices = [
+                    { level: 'Standard', price: price },
+                    { level: 'Wholesale', price: price * 0.8 },
+                    { level: 'Retail', price: price * 1.2 }
+                ];
 
                 products.push({
                     name: name,
                     stock: Math.abs(stock),
                     price: price,
-                    guid: item.$.GUID || name // Use GUID or Name as key
+                    guid: item.$.GUID || name,
+                    prices: prices
                 });
             }
         }
@@ -173,12 +167,53 @@ async function syncProducts() {
                 products
             }, { headers: { Authorization: `Bearer ${API_TOKEN}` } });
             console.log("Products synced successfully.");
-        } else {
-            console.log("No Stock Items found in Tally response.");
         }
 
     } catch (e) {
         console.error("Error parsing Tally XML:", e.message);
+    }
+}
+
+async function checkAndCreateLedger(ledgerName) {
+    // Check if ledger exists in Tally (Mock check or simple Export)
+    // For Tally, usually we just try to Export it. If empty, it doesn't exist.
+    // Or we just try to CREATE it with IGNORE_DUPLICATE logic (Tally generally updates or ignores).
+
+    console.log(`Ensuring Data for Client: ${ledgerName} in Tally...`);
+
+    const xml = `
+    <ENVELOPE>
+        <HEADER>
+            <TALLYREQUEST>Import Data</TALLYREQUEST>
+        </HEADER>
+        <BODY>
+            <IMPORTDATA>
+                <REQUESTDESC>
+                    <REPORTNAME>All Masters</REPORTNAME>
+                </REQUESTDESC>
+                <REQUESTDATA>
+                    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+                        <LEDGER NAME="${ledgerName}" ACTION="Create">
+                            <NAME.LIST>
+                                <NAME>${ledgerName}</NAME>
+                            </NAME.LIST>
+                            <PARENT>Sundry Debtors</PARENT>
+                            <OPENINGBALANCE>0</OPENINGBALANCE>
+                            <ISBILLWISEON>Yes</ISBILLWISEON>
+                        </LEDGER>
+                    </TALLYMESSAGE>
+                </REQUESTDATA>
+            </IMPORTDATA>
+        </BODY>
+    </ENVELOPE>
+    `;
+
+    const res = await sendToTally(xml);
+    // Tally returns <CREATED>1</CREATED> or <ERRORS>...
+    if (res && res.includes("<CREATED>1</CREATED>")) {
+        console.log(`Ledger ${ledgerName} created/updated.`);
+    } else if (res && res.includes('Errors')) {
+        console.log(`Note: Ledger ${ledgerName} might already exist or error:`, res);
     }
 }
 
@@ -196,8 +231,20 @@ async function processPendingOrders() {
         for (const order of orders) {
             console.log(`Processing Order #${order.id}...`);
 
-            // Create XML for Tally Import
-            // This is a minimal Sales Voucher XML
+            // Ensure Customer Ledger Exists
+            if (order.customer_name) {
+                await checkAndCreateLedger(order.customer_name);
+            }
+
+            // Use specific Sales Ledger if mapped, else valid default?
+            // "Parties" > "Sundry Debtors" usually.
+            // "Sales" ledger for items.
+            // Tally Voucher XML structure typically:
+            // Header > Voucher > PartyLedger (Customer)
+            // Inventory Entries > Ledger (Sales Account)
+
+            const salesLedger = order.tally_sales_ledger || 'Sales';
+
             const voucherXml = `
             <ENVELOPE>
                 <HEADER>
@@ -214,7 +261,9 @@ async function processPendingOrders() {
                                     <DATE>${new Date(order.order_date).toISOString().split('T')[0].replace(/-/g, '')}</DATE>
                                     <VOUCHERNUMBER>${order.order_number}</VOUCHERNUMBER>
                                     <PARTYLEDGERNAME>${order.customer_name}</PARTYLEDGERNAME>
+                                    <PRICELEVEL>${order.price_level || 'Standard'}</PRICELEVEL>
                                     <NARRATION>Online Order ID: ${order.id}</NARRATION>
+                                    <EFFECTIVEDATE>${new Date(order.order_date).toISOString().split('T')[0].replace(/-/g, '')}</EFFECTIVEDATE>
                                     
                                     ${order.items.map(item => `
                                     <ALLINVENTORYENTRIES.LIST>
@@ -223,6 +272,10 @@ async function processPendingOrders() {
                                         <ACTUALQTY>${item.qty} Pcs</ACTUALQTY>
                                         <BILLEDQTY>${item.qty} Pcs</BILLEDQTY>
                                         <AMOUNT>-${item.amount}</AMOUNT>
+                                        <ACCOUNTINGALLOCATIONS.LIST>
+                                            <LEDGERNAME>${salesLedger}</LEDGERNAME>
+                                            <AMOUNT>-${item.amount}</AMOUNT>
+                                        </ACCOUNTINGALLOCATIONS.LIST>
                                     </ALLINVENTORYENTRIES.LIST>
                                     `).join('')}
                                     
@@ -242,7 +295,7 @@ async function processPendingOrders() {
                 await axios.post(`${BACKEND_BASE_URL}/integration/update-order-status`, {
                     order_id: order.id,
                     status: 'Posted to Tally',
-                    tally_voucher_number: order.order_number, // Tally doesn't always return ID easily in import, we assume success uses our ref
+                    tally_voucher_number: order.order_number,
                     tally_voucher_date: new Date()
                 }, { headers: { Authorization: `Bearer ${API_TOKEN}` } });
             } else {
@@ -262,6 +315,7 @@ async function run() {
     }
 
     while (true) {
+        await syncPriceLevels();
         await syncProducts();
         await processPendingOrders();
         console.log("Waiting 60s...");

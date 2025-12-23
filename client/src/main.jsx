@@ -11,6 +11,7 @@ import ProductsList from "./pages/ProductsList";
 import OrdersList from "./pages/OrdersList";
 import UsersList from "./pages/UsersList";
 import RolesList from "./pages/RolesList";
+import PriceLevelsMaster from "./pages/PriceLevelsMaster";
 import Settings from "./pages/Settings";
 import ProtectedRoute from "./router/ProtectedRoute";
 import Layout from "./components/Layout";
@@ -66,6 +67,7 @@ ReactDOM.createRoot(rootElement).render(
                     <Route path="/roles/list" element={<RolesList />} />
                     <Route path="/users/list" element={<UsersList />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/masters/price-levels" element={<PriceLevelsMaster />} />
                     {/* Add more protected routes here */}
                   </Route>
                 </Routes>

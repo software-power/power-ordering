@@ -63,7 +63,17 @@ export default function ProductsList() {
     columns.push({ name: 'Stock', selector: (row: any) => row.stock, sortable: true });
   }
 
-  columns.push({ name: 'Price', selector: (row: any) => row.price, sortable: true });
+  columns.push({
+    name: 'Price',
+    selector: (row: any) => {
+      if (row.prices && row.prices.length > 0) {
+        return `${row.price} (${row.prices.map((p: any) => `${p.price_level[0]}:${p.price}`).join(', ')})`;
+      }
+      return row.price;
+    },
+    sortable: true,
+    wrap: true
+  });
 
   if (isAdmin) {
     columns.push({ name: 'Owner', selector: (row: any) => row.owner_name, sortable: true });
