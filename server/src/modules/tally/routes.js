@@ -1,12 +1,12 @@
-
 import { Router } from 'express';
+import { testConnection, triggerSync, syncProductsNow, syncOrdersNow } from './controllers.js';
 import { requireAuth } from '../../middleware/auth.js';
-import { testConnection, syncProducts, syncOrders } from './controllers.js';
 
 const router = Router();
 
-router.post('/test', requireAuth, testConnection);
-router.post('/products/sync', requireAuth, syncProducts);
-router.post('/orders/sync', requireAuth, syncOrders);
+router.post('/test-connection', requireAuth, testConnection);
+router.post('/trigger-sync', requireAuth, triggerSync);
+router.post('/products/sync', requireAuth, syncProductsNow);
+router.post('/orders/sync', requireAuth, syncOrdersNow);
 
 export default router;

@@ -42,7 +42,7 @@ export default function Dashboard() {
   }, [state.accessToken]);
 
   const checkTally = (url, port) => {
-    fetch(`${settings.apiBaseUrl}/tally/test`, {
+    fetch(`${settings.apiBaseUrl}/tally/test-connection`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

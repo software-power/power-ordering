@@ -10,5 +10,7 @@ export const env = {
   CLIENT_URL: process.env.CLIENT_URL,
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_USER: process.env.SMTP_USER,
-  SMTP_PASS: process.env.SMTP_PASS
+  SMTP_PASS: process.env.SMTP_PASS,
+  TALLY_SYNC_ENABLED: process.env.TALLY_SYNC_ENABLED === 'true',
+  TALLY_SYNC_INTERVAL: parseInt(process.env.TALLY_SYNC_INTERVAL) || 60
 };

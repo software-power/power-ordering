@@ -15,6 +15,7 @@ import productRoutes from "./modules/products/routes.js";
 import orderRoutes from "./modules/orders/routes.js";
 import integrationRoutes from "./modules/integration/routes.js";
 import masterRoutes from "./modules/masters/routes.js";
+import { startTallyJobs, setupGracefulShutdown } from './jobs/tallyJobs.js';
 
 const app = express();
 app.use(cors());
@@ -61,4 +62,15 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'Server error' });
 });
 
-app.listen(env.PORT, () => console.log(`Server on ${env.PORT}`));
+app.listen(env.PORT, () => {
+  console.log(`Server on ${env.PORT}`);
+
+  // Start Tally background sync if enabled
+  if (env.TALLY_SYNC_ENABLED) {
+    console.log('Starting Tally background sync...');
+    startTallyJobs(env.TALLY_SYNC_INTERVAL);
+    setupGracefulShutdown();
+  } else {
+    console.log('Tally background sync is disabled');
+  }
+});

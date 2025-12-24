@@ -48,13 +48,16 @@ export default function Settings() {
     const handleTestTally = async () => {
         setTestingTally(true);
         try {
-            const res = await fetch(`${settings.apiBaseUrl}/tally/test`, {
+            const res = await fetch(`${settings.apiBaseUrl}/tally/test-connection`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${state.accessToken}`
                 },
-                body: JSON.stringify(tallyConfig)
+                body: JSON.stringify({
+                    tally_url: tallyConfig.tally_url,
+                    tally_port: tallyConfig.tally_port
+                })
             });
             const data = await res.json();
             if (res.ok) toast.success(data.message);
